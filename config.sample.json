@@ -1,0 +1,9 @@
+{
+  "width": 960,
+  "frames": 20,
+  "quality": 100,
+  "bucket": "gifs",
+  "dist": "/Users/user/gifs",
+  "src": "/Users/user/screencaps",
+  "log_level": "ERROR"
+}
