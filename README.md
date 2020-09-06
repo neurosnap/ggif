@@ -4,9 +4,13 @@ Convert movies to gifs and upload to GCP
 
 ```bash
 # grab the newest file inside src folder
-./main
+ggif
 ```
 
 ```bash
-./main <file>.mov
+ggif <file>.mov
+```
+
+```bash
+ggif help
 ```
