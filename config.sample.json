@@ -5,5 +5,5 @@
   "bucket": "gifs",
   "dist": "/Users/<user>/gifs",
   "src": "/Users/<user>/screencaps",
-  "log_level": "ERROR"
+  "log": "ERROR"
 }
