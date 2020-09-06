@@ -1,5 +1,5 @@
 .DS_Store
 config.json
 *.swp
-main
-ggif
+./main
+./ggif
