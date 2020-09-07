@@ -18,12 +18,8 @@ import (
 )
 
 var log = logging.MustGetLogger("app")
-
-// Example format string. Everything except the message has a custom color
-// which is dependent on the log level. Many fields have a custom output
-// formatting too, eg. the time returns the hour down to the milli second.
 var format = logging.MustStringFormatter(
-	`%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.4s} %{id:03x}%{color:reset} %{message}`,
+	`%{color} %{shortfile} ▶ %{level:.4s} %{id:03x}%{color:reset} %{message}`,
 )
 
 func printError(err error) {
@@ -121,7 +117,11 @@ func findConfigFile() string {
 	if err != nil {
 		log.Debug(err)
 	}
-	return filepath.Join(user.HomeDir, ".ggif.json")
+	fname := filepath.Join(user.HomeDir, ".ggif.json")
+	if _, err := os.Stat(fname); err == nil {
+		return fname
+	}
+	return ""
 }
 
 func watch(c *cli.Context) {
@@ -186,6 +186,7 @@ func process(c *cli.Context, videoFile string) {
 }
 
 func main() {
+	logging.SetFormatter(format)
 	configFile := findConfigFile()
 
 	curDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
@@ -266,6 +267,6 @@ func main() {
 
 	err = app.Run(os.Args)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err.Error())
 	}
 }
