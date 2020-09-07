@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/atotto/clipboard"
+	"github.com/fsnotify/fsnotify"
 	"github.com/h2non/filetype"
 	"github.com/op/go-logging"
 	"github.com/urfave/cli/v2"
@@ -123,14 +124,45 @@ func findConfigFile() string {
 	return filepath.Join(user.HomeDir, ".ggif.json")
 }
 
-func process(c *cli.Context) {
-	videoFile := ""
-	if c.Args().Len() >= 1 {
-		videoFile = c.Args().Get(0)
-	} else {
-		videoFile = findNewestFile(c.String("src"))
+func watch(c *cli.Context) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal(err)
 	}
+	defer watcher.Close()
 
+	log.Debugf("Watching %s", c.String("src"))
+
+	done := make(chan bool)
+	go func() {
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				log.Debug("event:", event)
+				if event.Op&fsnotify.Create == fsnotify.Create {
+					log.Debug("modified file:", event.Name)
+					process(c, event.Name)
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				log.Debug("error:", err)
+			}
+		}
+	}()
+
+	err = watcher.Add(c.String("src"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	<-done
+}
+
+func process(c *cli.Context, videoFile string) {
 	if videoFile == "" {
 		log.Fatal("No file specified and no file found in config.Src, exiting")
 	}
@@ -202,6 +234,11 @@ func main() {
 			Value: configFile,
 			Usage: "location and file name of configuration file",
 		},
+		&cli.BoolFlag{
+			Name:  "watch",
+			Value: false,
+			Usage: "watch src directory for new files",
+		},
 	}
 
 	app := &cli.App{
@@ -211,7 +248,18 @@ func main() {
 		Before: altsrc.InitInputSourceWithContext(flags, altsrc.NewJSONSourceFromFlagFunc("load")),
 		Action: func(c *cli.Context) error {
 			initLogging(c)
-			process(c)
+			if c.Bool("watch") {
+				watch(c)
+			} else {
+				videoFile := ""
+				if c.Args().Len() >= 1 {
+					videoFile = c.Args().Get(0)
+				} else {
+					videoFile = findNewestFile(c.String("src"))
+				}
+				process(c, videoFile)
+			}
+
 			return nil
 		},
 	}

@@ -1,5 +1,5 @@
 build:
-	go build -o ggif cmd/ggif
+	go build -o ggif ./cmd/ggif
 .PHONY: build
 
 install:
