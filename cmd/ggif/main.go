@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -66,15 +67,6 @@ func runCmd(name string, arg ...string) {
 	printError(err)
 }
 
-func createTmpDir() string {
-	dir, err := ioutil.TempDir("/tmp", "pngs")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return dir
-}
-
 func initLogging(c *cli.Context) {
 	level, err := logging.LogLevel(c.String("log"))
 	if err != nil {
@@ -83,30 +75,31 @@ func initLogging(c *cli.Context) {
 	logging.SetLevel(level, "app")
 }
 
-func createGif(c *cli.Context, tmpDir string, outfn string) {
-	infn := filepath.Join(tmpDir, "*.png")
-
-	cmdin := fmt.Sprintf(
-		"gifski -W %d -r %d -Q %d -o %s %s",
-		c.Int("width"),
-		c.Int("frames"),
-		c.Int("quality"),
-		outfn,
-		infn,
-	)
-	runCmd("/bin/sh", "-c", cmdin)
-}
-
-func uploadGCP(bucket string, outfn string, outputFile string) {
+func uploadGCP(bucket string, videoFile string, bucketFile string) {
 	if bucket == "" {
 		return
 	}
 
-	runCmd("gsutil", "cp", outfn, fmt.Sprintf("gs://%s", bucket))
+	runCmd("gsutil", "cp", videoFile, fmt.Sprintf("gs://%s", bucket))
 	url := fmt.Sprintf(
 		"https://storage.googleapis.com/%s/%s",
 		bucket,
-		outputFile,
+		bucketFile,
+	)
+	fmt.Println(url)
+	clipboard.WriteAll(url)
+}
+
+func uploadS3(bucket string, videoFile string, bucketFile string) {
+	if bucket == "" {
+		return
+	}
+
+	runCmd("aws", "s3", "cp", videoFile, fmt.Sprintf("s3://%s/%s", bucket, bucketFile), "--acl", "public-read")
+	url := fmt.Sprintf(
+		"https://%s.s3.amazonaws.com/%s",
+		bucket,
+		bucketFile,
 	)
 	fmt.Println(url)
 	clipboard.WriteAll(url)
@@ -167,22 +160,12 @@ func process(c *cli.Context, videoFile string) {
 		log.Fatal("No file specified and no file found in config.Src, exiting")
 	}
 
-	tmpDir := createTmpDir()
-	defer os.RemoveAll(tmpDir)
+	ext := filepath.Ext(videoFile)
+	videoFileName := strings.TrimSuffix(filepath.Base(videoFile), ext)
+	bucketFile := fmt.Sprintf("%s_%d%s", videoFileName, time.Now().Unix(), ext)
 
-	tmpfn := filepath.Join(tmpDir, "frame%04d.png")
-	runCmd("ffmpeg", "-i", videoFile, tmpfn)
-
-	newName := time.Now().Unix()
-	outputFile := fmt.Sprintf("%d.gif", newName)
-	distDir := c.String("dist")
-	if distDir == "" {
-		distDir = c.String("src")
-	}
-	outfn := filepath.Join(distDir, outputFile)
-
-	createGif(c, tmpDir, outfn)
-	uploadGCP(c.String("bucket"), outfn, outputFile)
+	uploadGCP(c.String("gcp-bucket"), videoFile, bucketFile)
+	uploadS3(c.String("s3-bucket"), videoFile, bucketFile)
 }
 
 func main() {
@@ -200,35 +183,20 @@ func main() {
 			Value: "ERROR",
 			Usage: "log level for output",
 		}),
-		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:  "quality",
-			Value: 100,
-			Usage: "quality of gif (1-100)",
-		}),
-		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:  "frames",
-			Value: 20,
-			Usage: "framerate for gif",
-		}),
-		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:  "width",
-			Value: 960,
-			Usage: "width resolution for gif",
-		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:  "src",
 			Value: curDir,
 			Usage: "source folder for movie file",
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:  "dist",
-			Value: "",
-			Usage: "destination folder folder for gif file",
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:  "bucket",
+			Name:  "gcp-bucket",
 			Value: "",
 			Usage: "google cloud storage bucket name",
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:  "s3-bucket",
+			Value: "",
+			Usage: "aws s3 bucket name",
 		}),
 		&cli.StringFlag{
 			Name:  "load",
